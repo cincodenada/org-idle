@@ -24,37 +24,46 @@ local function get_agenda_buf()
     end
 end
 
-local function callback(logbook, action, duration, window)
-    local agenda = require("orgmode.agenda")
-    local active_clock = logbook.items[1]
-    local agendabuf = get_agenda_buf()
-    print(logbook, action, duration, window, agendabuf)
-    print("logbook", vim.inspect(logbook), vim.inspect(active_clock))
+local function set_end_time(headline, duration)
+    local logbook = headline.logbook
+    print(vim.inspect(headline), vim.inspect(headline.logbook))
+    local last_clock = logbook.items[1]
+    print("clock", vim.inspect(last_clock))
+    print("duration", duration)
+    local line_nr = last_clock.start_time.range.start_line
+    local end_time = last_clock.end_time:subtract({ sec = duration })
+    local minutes = last_clock.duration:to_string('HH:MM')
+    orgfiles.update_file(headline.file, function()
+        local line = vim.fn.getline(line_nr):gsub('%-%-.*$', '')
+        print(line)
+        local line = string.format(
+            '%s--%s => %s',
+            line,
+            end_time:to_wrapped_string(),
+            minutes
+        )
+        print(line)
+        vim.api.nvim_call_function('setline', { line_nr, line })
+    end):next(function()
+        logbook:recalculate_estimate(line_nr)
+    end)
+end
+
+local function callback(headline, action, duration, window)
+    print(headline, action, duration, window, agendabuf)
+    local logbook = headline.logbook
     if action == "k" then
     elseif action == "K" then
-        agenda:clock_out()
+        logbook:clock_out()
     elseif action == "s" then
-        local result = agenda:clock_out()
-        if result then
-            result.next(function()
-                active_clock.end_time = active_clock.end_time:subtract({ orgduration.from_seconds(duration) })
-                agenda:clock_in()
-                -- logbook:recalculate_estimate()
-            end)
-        end
+        logbook:clock_out()
+        set_end_time(headline, duration)
+        logbook:add_clock_in()
     elseif action == "S" then
-        local result = Promise.resolve(agenda:clock_out()):next(function(_)
-            if _ then print("result", vim.inspect(_)) end
-            print(vim.inspect(duration), vim.inspect(orgduration.from_seconds(duration)))
-            active_clock.end_time = active_clock.end_time:subtract({ orgduration.from_seconds(duration) })
-            agenda:clock_in()
-            logbook:recalculate_estimate(1)
-            active_clock.end_time = active_clock.end_time:subtract({ orgduration.from_seconds(duration) })
-        end)
+        logbook:clock_out()
+        set_end_time(headline, duration)
     elseif action == "C" then
-        agenda:clock_cancel() -- .next(function()
-            -- logbook:cancel_active_clock()
-        --end)
+        logbook:cancel_active_clock()
     end
     M.in_dialog = false
     vim.api.nvim_win_close(window, true)
@@ -97,17 +106,15 @@ local function handle_return(idletime)
         })
         vim.cmd("stopinsert")
 
-        local logbook = headline.logbook
-
-        vim.keymap.set("n", "k", function() callback(logbook, "k", idletime) end,
+        vim.keymap.set("n", "k", function() callback(headline, "k", idletime, win) end,
             { buffer = buf, silent = true, noremap = true, desc = "Keep clock" })
-        vim.keymap.set("n", "K", function() callback(logbook, "K", idletime, win) end,
+        vim.keymap.set("n", "K", function() callback(headline, "K", idletime, win) end,
             { buffer = buf, silent = true, noremap = true, desc = "Keep clock and clock out" })
-        vim.keymap.set("n", "s", function() callback(logbook, "s", idletime, win) end,
+        vim.keymap.set("n", "s", function() callback(headline, "s", idletime, win) end,
             { buffer = buf, silent = true, noremap = true, desc = "Subtract from clock" })
-        vim.keymap.set("n", "S", function() callback(logbook, "S", idletime, win) end,
+        vim.keymap.set("n", "S", function() callback(headline, "S", idletime, win) end,
             { buffer = buf, silent = true, noremap = true, desc = "Subtract from clock and clock out" })
-        vim.keymap.set("n", "C", function() callback(logbook, "C", idletime, win) end,
+        vim.keymap.set("n", "C", function() callback(headline, "C", idletime, win) end,
             { buffer = buf, silent = true, noremap = true, desc = "Reset clock completely" })
         vim.keymap.set("n", "q", "<CMD>close<CR>",
             { buffer = buf, silent = true, noremap = true, desc = "Close window and keep clock" })
@@ -126,7 +133,7 @@ M.defaults = {
     timeout = 2,
     idletime = 10,
     callback = function()
-        local idletime = get_idle_native()
+        local idletime = get_idle_native()/60
         if idletime then
             if M.idle then
                 if M.active then
