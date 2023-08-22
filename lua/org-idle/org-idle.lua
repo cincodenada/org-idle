@@ -49,8 +49,8 @@ local function set_end_time(headline, duration)
     end)
 end
 
-local function callback(headline, action, duration, window)
-    print(headline, action, duration, window, agendabuf)
+local function dialog_action(headline, action, duration, window)
+    print(headline, action, duration, window)
     local logbook = headline.logbook
     if action == "k" then
     elseif action == "K" then
@@ -79,76 +79,79 @@ local function get_idle_x()
     return false
 end
 
+-- Returns time since last activity in seconds
 local function get_idle_native()
     return vim.fn.reltimefloat(vim.fn.reltime(M.last_activity))
 end
 
-local function handle_return(idletime)
-    vim.notify("You came back!")
-    local headline = orgfiles.get_clocked_headline()
-    if headline then
-        local buf = vim.api.nvim_create_buf(false, true)
-        local win = vim.api.nvim_open_win(buf, false, {
-            relative = "editor",
-            width = 60,
-            height = 20,
-            row = 0.25,
-            col = 0.25,
-            border = "rounded",
-        })
-        vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
-            "You just returned from being idle "..math.floor(idletime).." minutes.",
-            "\t- (k)eep the clocked-in time and stay clocked-in",
-            "\t- (K)eep the clocked-in time and clock out",
-            "\t- (s)ubtract the time and stay clocked-in",
-            "\t- (S)ubtract the time and clock out",
-            "\t- (C)ancel the clock altogether",
-        })
-        vim.cmd("stopinsert")
-
-        vim.keymap.set("n", "k", function() callback(headline, "k", idletime, win) end,
-            { buffer = buf, silent = true, noremap = true, desc = "Keep clock" })
-        vim.keymap.set("n", "K", function() callback(headline, "K", idletime, win) end,
-            { buffer = buf, silent = true, noremap = true, desc = "Keep clock and clock out" })
-        vim.keymap.set("n", "s", function() callback(headline, "s", idletime, win) end,
-            { buffer = buf, silent = true, noremap = true, desc = "Subtract from clock" })
-        vim.keymap.set("n", "S", function() callback(headline, "S", idletime, win) end,
-            { buffer = buf, silent = true, noremap = true, desc = "Subtract from clock and clock out" })
-        vim.keymap.set("n", "C", function() callback(headline, "C", idletime, win) end,
-            { buffer = buf, silent = true, noremap = true, desc = "Reset clock completely" })
-        vim.keymap.set("n", "q", "<CMD>close<CR>",
-            { buffer = buf, silent = true, noremap = true, desc = "Close window and keep clock" })
-        vim.api.nvim_set_current_win(win)
-        -- vim.ui.input({
-        --     prompt = ""
-        -- }, {})
+local function handle_return()
+    M.inactive = false
+    if not M.in_dialog then
+        vim.notify("You came back!")
+        local idletime = get_idle_native()/60
+        local headline = orgfiles.get_clocked_headline()
+        if headline then
+            show_dialog(headline, idletime)
+        end
     end
 end
 
-M.test = function(idletime)
-    handle_return(idletime)
+local function show_dialog(headline, idletime)
+    local buf = vim.api.nvim_create_buf(false, true)
+    local win = vim.api.nvim_open_win(buf, false, {
+        relative = "editor",
+        width = 60,
+        height = 20,
+        row = 0.25,
+        col = 0.25,
+        border = "rounded",
+    })
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
+        "You just returned from being idle "..math.floor(idletime).." minutes.",
+        "\t- (k)eep the clocked-in time and stay clocked-in",
+        "\t- (K)eep the clocked-in time and clock out",
+        "\t- (s)ubtract the time and stay clocked-in",
+        "\t- (S)ubtract the time and clock out",
+        "\t- (C)ancel the clock altogether",
+    })
+
+    add_action = function(key, desc, callback)
+        if not callback then
+            callback = function()
+                dialog_action(headline, key, idletime, win)
+            end
+        end
+        vim.keymap.set("n", key, callback, {
+            buffer = buf,
+            silent = true,
+            noremap = true,
+            desc
+        })
+    end
+
+    add_action("k", "Keep clock")
+    add_action("K", "Keep clock and clock out")
+    add_action("s", "Subtract from clock")
+    add_action("S", "Subtract from clock and clock out")
+    add_action("C", "Reset clock completely")
+    add_action("q", "Close window and keep clock", "<CMD>close<CR>")
+
+    vim.cmd("stopinsert")
+    vim.api.nvim_set_current_win(win)
+    -- vim.ui.input({
+    --     prompt = ""
+    -- }, {})
 end
 
 M.defaults = {
-    timeout = 2,
-    idletime = 10,
+    timeout = 2, -- seconds
+    idletime = 10, -- minutes
     callback = function()
+        if M.inactive then return end
+
         local idletime = get_idle_native()/60
-        if idletime then
-            if M.idle then
-                if M.active then
-                    M.idle = false
-                    M.last_activity = vim.fn.reltime()
-                    if not M.in_dialog then
-                        M.in_dialog = true
-                        handle_return(idletime)
-                    end
-                end
-            else
-                if idletime > M.config.idletime then
-                    M.idle = true
-                end
-            end
+        if idletime and idletime > M.config.idletime then
+            M.inactive = true
         end
     end
 }
@@ -171,7 +174,9 @@ function M.setup(user_config)
         group = M.augroup,
         pattern = "*",
         callback = function(ev)
-            M.active = true
+            if M.inactive then
+                handle_return(idletime)
+            end
         end
     })
 
