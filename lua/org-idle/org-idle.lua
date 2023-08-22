@@ -24,7 +24,7 @@ local function get_agenda_buf()
     end
 end
 
-local function set_end_time(headline, duration)
+local function set_end_time(eadline, duration)
     local logbook = headline.logbook
     print(vim.inspect(headline), vim.inspect(headline.logbook))
     local last_clock = logbook.items[1]
@@ -44,27 +44,31 @@ local function set_end_time(headline, duration)
         )
         print(line)
         vim.api.nvim_call_function('setline', { line_nr, line })
-    end):next(function()
         logbook:recalculate_estimate(line_nr)
     end)
 end
 
 local function dialog_action(headline, action, duration, window)
-    print(headline, action, duration, window)
-    local logbook = headline.logbook
-    if action == "k" then
-    elseif action == "K" then
-        logbook:clock_out()
-    elseif action == "s" then
-        logbook:clock_out()
-        set_end_time(headline, duration)
-        logbook:add_clock_in()
-    elseif action == "S" then
-        logbook:clock_out()
-        set_end_time(headline, duration)
-    elseif action == "C" then
-        logbook:cancel_active_clock()
-    end
+    print(headline.title, action, duration, window)
+    orgfiles.update_file(headline.file, function()
+        local logbook = headline.logbook
+        if action == "k" then
+        elseif action == "K" then
+            logbook:clock_out()
+        elseif action == "s" then
+            logbook:clock_out()
+            set_end_time(headline, duration)
+            logbook:add_clock_in()
+        elseif action == "S" then
+            logbook:clock_out()
+            set_end_time(headline, duration)
+        elseif action == "C" then
+            logbook:cancel_active_clock()
+        elseif action == "q" then
+            -- just close, same as k
+        end
+    end)
+    M.last_activity = vim.fn.reltime()
     M.in_dialog = false
     vim.api.nvim_win_close(window, true)
 end
@@ -82,18 +86,6 @@ end
 -- Returns time since last activity in seconds
 local function get_idle_native()
     return vim.fn.reltimefloat(vim.fn.reltime(M.last_activity))
-end
-
-local function handle_return()
-    M.inactive = false
-    if not M.in_dialog then
-        vim.notify("You came back!")
-        local idletime = get_idle_native()/60
-        local headline = orgfiles.get_clocked_headline()
-        if headline then
-            show_dialog(headline, idletime)
-        end
-    end
 end
 
 local function show_dialog(headline, idletime)
@@ -116,6 +108,7 @@ local function show_dialog(headline, idletime)
     })
 
     add_action = function(key, desc, callback)
+        print(key, desc, callback)
         if not callback then
             callback = function()
                 dialog_action(headline, key, idletime, win)
@@ -125,7 +118,7 @@ local function show_dialog(headline, idletime)
             buffer = buf,
             silent = true,
             noremap = true,
-            desc
+            desc = desc
         })
     end
 
@@ -134,7 +127,7 @@ local function show_dialog(headline, idletime)
     add_action("s", "Subtract from clock")
     add_action("S", "Subtract from clock and clock out")
     add_action("C", "Reset clock completely")
-    add_action("q", "Close window and keep clock", "<CMD>close<CR>")
+    add_action("q", "Close window and keep clock")
 
     vim.cmd("stopinsert")
     vim.api.nvim_set_current_win(win)
@@ -143,15 +136,35 @@ local function show_dialog(headline, idletime)
     -- }, {})
 end
 
+local function handle_return()
+    M.inactive = false
+    M.last_activity = vim.fn.reltime()
+    if not M.in_dialog then
+        vim.notify("You came back!")
+        local idletime = get_idle_native()/60
+        local headline = orgfiles.get_clocked_headline()
+        if headline then
+            M.in_dialog = true
+            show_dialog(headline, idletime)
+        end
+    end
+end
+
 M.defaults = {
     timeout = 2, -- seconds
     idletime = 10, -- minutes
     callback = function()
-        if M.inactive then return end
+        if M.in_dialog then return end
 
-        local idletime = get_idle_native()/60
-        if idletime and idletime > M.config.idletime then
-            M.inactive = true
+        if M.pending_activity then
+            M.last_activity = vim.fn.reltime()
+            M.pending_activity = false
+        elseif not M.inactive then
+            local idletime = get_idle_native()/60
+            if idletime and idletime > M.config.idletime then
+                print("Idle for "..idletime.." seconds, marking inactive")
+                M.inactive = true
+            end
         end
     end
 }
@@ -163,19 +176,14 @@ function M.setup(user_config)
     -- Set up activity watcher
     M.last_activity = vim.fn.reltime()
     M.augroup = vim.api.nvim_create_augroup("OrgIdle", {})
-    vim.api.nvim_create_autocmd({"CursorHold"}, {
-        group = M.augroup,
-        pattern = "*",
-        callback = function(ev)
-            M.last_activity = vim.fn.reltime()
-        end
-    })
-    vim.api.nvim_create_autocmd({"CursorMoved", "CursorMovedI"}, {
+    vim.api.nvim_create_autocmd({"CursorMoved", "CursorMovedI", "FocusGained", "CmdlineChanged"}, {
         group = M.augroup,
         pattern = "*",
         callback = function(ev)
             if M.inactive then
-                handle_return(idletime)
+                handle_return()
+            else
+                M.pending_activity = true
             end
         end
     })
