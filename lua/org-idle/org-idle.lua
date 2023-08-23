@@ -138,16 +138,17 @@ end
 
 local function handle_return()
     M.inactive = false
-    M.last_activity = vim.fn.reltime()
     if not M.in_dialog then
-        vim.notify("You came back!")
         local idletime = get_idle_native()/60
+        vim.notify("You came back! I last saw you "..math.round(idletime).." minutes ago")
+
         local headline = orgfiles.get_clocked_headline()
         if headline then
             M.in_dialog = true
             show_dialog(headline, idletime)
         end
     end
+    M.last_activity = vim.fn.reltime()
 end
 
 M.defaults = {
