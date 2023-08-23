@@ -99,7 +99,7 @@ local function show_dialog(headline, idletime)
         border = "rounded",
     })
     vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
-        "You just returned from being idle "..math.floor(idletime).." minutes.",
+        "You just returned from being idle "..math.floor(idletime+0.5).." minutes.",
         "\t- (k)eep the clocked-in time and stay clocked-in",
         "\t- (K)eep the clocked-in time and clock out",
         "\t- (s)ubtract the time and stay clocked-in",
@@ -140,7 +140,7 @@ local function handle_return()
     M.inactive = false
     if not M.in_dialog then
         local idletime = get_idle_native()/60
-        vim.notify("You came back! I last saw you "..math.round(idletime).." minutes ago")
+        vim.notify("You came back! I last saw you "..math.floor(idletime+0.5).." minutes ago")
 
         local headline = orgfiles.get_clocked_headline()
         if headline then
