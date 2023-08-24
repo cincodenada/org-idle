@@ -139,13 +139,18 @@ end
 local function handle_return()
     M.inactive = false
     if not M.in_dialog then
-        local idletime = get_idle_native()/60
-        vim.notify("You came back! I last saw you "..math.floor(idletime+0.5).." minutes ago")
+        local idle_secs = get_idle_native()
+        local idle_mins = idle_secs/60
+        local last_seen = localtime() - idle_secs
+        vim.notify("You came back! I last saw you "..math.floor(idle_mins+0.5).." minutes ago ("..vim.fn.strftime("%a %H:%M", last_seen))
 
         local headline = orgfiles.get_clocked_headline()
         if headline then
+            print("Showing dialog...")
             M.in_dialog = true
-            show_dialog(headline, idletime)
+            show_dialog(headline, idle_mins)
+        else
+            print("Not clocked in, ignoring")
         end
     end
     M.last_activity = vim.fn.reltime()
@@ -161,9 +166,10 @@ M.defaults = {
             M.last_activity = vim.fn.reltime()
             M.pending_activity = false
         elseif not M.inactive then
-            local idletime = get_idle_native()/60
-            if idletime and idletime > M.config.idletime then
-                print("Idle for "..idletime.." seconds, marking inactive")
+            local idle_secs = get_idle_native()
+            local idle_mins = idle_secs/60
+            if idle_mins and idle_mins > M.config.idletime then
+                print("Idle for "..idle_mins.." minutes, marking inactive")
                 M.inactive = true
             end
         end
