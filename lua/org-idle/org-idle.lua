@@ -49,7 +49,7 @@ local function set_end_time(eadline, duration)
 end
 
 local function dialog_action(headline, action, duration, window)
-    print(headline.title, action, duration, window)
+    print(headline.title, headline.file, action, duration, window)
     orgfiles.update_file(headline.file, function()
         local logbook = headline.logbook
         if action == "k" then
@@ -68,6 +68,7 @@ local function dialog_action(headline, action, duration, window)
             -- just close, same as k
         end
     end)
+    -- TODO: Refresh agenda
     M.last_activity = vim.fn.reltime()
     M.in_dialog = false
     vim.api.nvim_win_close(window, true)
@@ -129,8 +130,9 @@ local function show_dialog(headline, idletime)
     add_action("C", "Reset clock completely")
     add_action("q", "Close window and keep clock")
 
-    vim.cmd("stopinsert")
+    -- TODO: This focusing isn't working
     vim.api.nvim_set_current_win(win)
+    vim.cmd("stopinsert")
     -- vim.ui.input({
     --     prompt = ""
     -- }, {})
@@ -142,7 +144,7 @@ local function handle_return()
         local idle_secs = get_idle_native()
         local idle_mins = idle_secs/60
         local last_seen = vim.fn.localtime() - idle_secs
-        vim.notify("You came back! I last saw you "..math.floor(idle_mins+0.5).." minutes ago ("..vim.fn.strftime("%a %H:%M", last_seen))
+        vim.notify("You came back! I last saw you "..math.floor(idle_mins+0.5).." minutes ago ("..vim.fn.strftime("%a %H:%M", last_seen)..")")
 
         local headline = orgfiles.get_clocked_headline()
         if headline then
