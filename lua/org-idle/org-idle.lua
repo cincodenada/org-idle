@@ -85,7 +85,7 @@ end
 
 -- Returns time since last activity in seconds
 local function get_idle_native()
-    return vim.fn.reltimefloat(vim.fn.reltime(M.last_activity))
+    return math.floor(vim.fn.reltimefloat(vim.fn.reltime(M.last_activity)))
 end
 
 local function show_dialog(headline, idletime)
@@ -141,7 +141,7 @@ local function handle_return()
     if not M.in_dialog then
         local idle_secs = get_idle_native()
         local idle_mins = idle_secs/60
-        local last_seen = localtime() - idle_secs
+        local last_seen = vim.fn.localtime() - idle_secs
         vim.notify("You came back! I last saw you "..math.floor(idle_mins+0.5).." minutes ago ("..vim.fn.strftime("%a %H:%M", last_seen))
 
         local headline = orgfiles.get_clocked_headline()
