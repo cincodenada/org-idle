@@ -24,14 +24,13 @@ local function get_agenda_buf()
     end
 end
 
-local function set_end_time(eadline, duration)
+local function set_end_time(headline, duration)
     local logbook = headline.logbook
-    print(vim.inspect(headline), vim.inspect(headline.logbook))
     local last_clock = logbook.items[1]
     print("clock", vim.inspect(last_clock))
     print("duration", duration)
     local line_nr = last_clock.start_time.range.start_line
-    local end_time = last_clock.end_time:subtract({ sec = duration })
+    local end_time = last_clock.end_time:subtract({ min = duration })
     local minutes = last_clock.duration:to_string('HH:MM')
     orgfiles.update_file(headline.file, function()
         local line = vim.fn.getline(line_nr):gsub('%-%-.*$', '')
