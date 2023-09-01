@@ -1,6 +1,7 @@
 local Promise = require('orgmode.utils.promise')
 
 local M = {}
+M.test = {}
 
 local org_status, org                  = pcall(require, "orgmode")
 local org_files_status, orgfiles       = pcall(require, "orgmode.parser.files")
@@ -24,31 +25,45 @@ local function get_agenda_buf()
     end
 end
 
-local function set_end_time(headline, duration)
+local function set_end_time(headline, idlemins)
     local logbook = headline.logbook
     local last_clock = logbook.items[1]
-    print("clock", vim.inspect(last_clock))
-    print("duration", duration)
-    local line_nr = last_clock.start_time.range.start_line
-    local end_time = last_clock.end_time:subtract({ min = duration })
-    local minutes = last_clock.duration:to_string('HH:MM')
-    orgfiles.update_file(headline.file, function()
+    --print("clock", vim.inspect(last_clock))
+    --print("idlemins", idlemins)
+    local start_time = last_clock.start_time
+    local line_nr = start_time.range.start_line
+    last_clock.end_time = last_clock.end_time:subtract({ min = idlemins })
+    last_clock.duration = orgduration.from_seconds(
+        last_clock.end_time.timestamp - last_clock.start_time.timestamp
+    )
+    print(line_nr)
+    --local clock_text = duration:to_string('HH:MM')
+    --print(vim.inspect(clock_text))
+    --print(vim.inspect(last_clock))
+    target = headline.file
+    if target == vim.fn.expand("%") then
+        target = vim.fn.expand("%:p")
+    end
+    orgfiles.update_file(target, function()
+        print("Starting thing!")
         local line = vim.fn.getline(line_nr):gsub('%-%-.*$', '')
         print(line)
         local line = string.format(
-            '%s--%s => %s',
+            '%s--%s',
             line,
-            end_time:to_wrapped_string(),
-            minutes
+            last_clock.end_time:to_wrapped_string()
         )
         print(line)
         vim.api.nvim_call_function('setline', { line_nr, line })
-        logbook:recalculate_estimate(line_nr)
-    end)
-end
 
-local function dialog_action(headline, action, duration, window)
-    print(headline.title, headline.file, action, duration, window)
+        logbook:recalculate_estimate(line_nr)
+        return "Yay"
+    end):next(function(result) print("Result", result) end)
+end
+M.test.set_end_time = set_end_time
+
+local function dialog_action(headline, action, idlemins, window)
+    print(headline.title, headline.file, action, idlemins, window)
     orgfiles.update_file(headline.file, function()
         local logbook = headline.logbook
         if action == "k" then
@@ -56,11 +71,11 @@ local function dialog_action(headline, action, duration, window)
             logbook:clock_out()
         elseif action == "s" then
             logbook:clock_out()
-            set_end_time(headline, duration)
+            set_end_time(headline, idlemins)
             logbook:add_clock_in()
         elseif action == "S" then
             logbook:clock_out()
-            set_end_time(headline, duration)
+            set_end_time(headline, idlemins)
         elseif action == "C" then
             logbook:cancel_active_clock()
         elseif action == "q" then
