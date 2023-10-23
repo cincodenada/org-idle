@@ -37,7 +37,6 @@ local function set_end_time(headline, idlemins)
         last_clock.end_time.timestamp - last_clock.start_time.timestamp
     )
     print(line_nr)
-    --local clock_text = duration:to_string('HH:MM')
     --print(vim.inspect(clock_text))
     --print(vim.inspect(last_clock))
     target = headline.file
@@ -45,20 +44,16 @@ local function set_end_time(headline, idlemins)
         target = vim.fn.expand("%:p")
     end
     orgfiles.update_file(target, function()
-        print("Starting thing!")
         local line = vim.fn.getline(line_nr):gsub('%-%-.*$', '')
-        print(line)
         local line = string.format(
             '%s--%s',
             line,
             last_clock.end_time:to_wrapped_string()
         )
-        print(line)
         vim.api.nvim_call_function('setline', { line_nr, line })
 
         logbook:recalculate_estimate(line_nr)
-        return "Yay"
-    end):next(function(result) print("Result", result) end)
+    end)
 end
 M.test.set_end_time = set_end_time
 
